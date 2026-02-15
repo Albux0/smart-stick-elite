@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Stick Pro - Elite</title>
+    <style>
+        :root {
+            --neon-blue: #00f2ff;
+            --danger-red: #ff3333;
+            --warning-yellow: #ffcc00;
+            --safe-green: #00ff88;
+            --dark-bg: #0a0f1e;
+        }
+
+        body {
+            background: var(--dark-bg);
+            color: white;
+            font-family: 'Inter', 'Segoe UI', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            /* Subtle scanline effect for "High Tech" feel */
+            background: radial-gradient(circle at center, #1a2a4a 0%, #0a0f1e 100%);
+        }
+
+        #status-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            padding: 3rem 2rem;
+            border-radius: 50px;
+            text-align: center;
+            width: 85%;
+            max-width: 400px;
+            box-shadow: 0 40px 100px rgba(0,0,0,0.8);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        /* Status Glows */
+        #status-card.danger { border-color: var(--danger-red); box-shadow: 0 0 60px rgba(255, 51, 51, 0.4); animation: shake 0.5s infinite; }
+        #status-card.warning { border-color: var(--warning-yellow); box-shadow: 0 0 40px rgba(255, 204, 0, 0.2); }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        .sensor-grid {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr 1fr;
+            gap: 15px;
+            margin: 35px 0;
+        }
+
+        .box {
+            background: rgba(255, 255, 255, 0.07);
+            padding: 20px 10px;
+            border-radius: 25px;
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: transform 0.2s;
+        }
+
+        .box.active-sensor { background: rgba(0, 242, 255, 0.1); border-color: var(--neon-blue); transform: scale(1.05); }
+
+        .label { font-size: 0.7rem; letter-spacing: 2px; opacity: 0.6; margin-bottom: 8px; display: block; font-weight: 700; }
+        .val { font-size: 1.8rem; font-weight: 900; color: var(--neon-blue); text-shadow: 0 0 10px rgba(0, 242, 255, 0.5); }
+
+        .btn-connect {
+            background: linear-gradient(135deg, #00f2ff 0%, #0066ff 100%);
+            border: none;
+            padding: 20px 50px;
+            color: white;
+            border-radius: 100px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            cursor: pointer;
+            box-shadow: 0 15px 30px rgba(0, 102, 255, 0.4);
+            transition: all 0.3s;
+        }
+
+        .btn-connect:hover { transform: translateY(-3px); box-shadow: 0 20px 40px rgba(0, 102, 255, 0.6); }
+
+        /* Pulsing Radar Circle */
+        .radar-ping {
+            width: 12px;
+            height: 12px;
+            background: var(--safe-green);
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 10px;
+            box-shadow: 0 0 15px var(--safe-green);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 255, 136, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(0, 255, 136, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 255, 136, 0); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="status-card">
+        <div id="status-header">
+            <span id="ping" style="display:none" class="radar-ping"></span>
+            <h2 id="msg" style="display:inline; font-weight: 300; font-size: 0.8rem; letter-spacing: 3px;">OFFLINE</h2>
+        </div>
+        
+        <div class="sensor-grid">
+            <div id="boxL" class="box">
+                <span class="label">LEFT</span>
+                <span id="L" class="val">--</span>
+            </div>
+            <div id="boxC" class="box">
+                <span class="label">CENTER</span>
+                <span id="C" class="val">--</span>
+            </div>
+            <div id="boxR" class="box">
+                <span class="label">RIGHT</span>
+                <span id="R" class="val">--</span>
+            </div>
+        </div>
+
+        <button class="btn-connect" onclick="connectBluetooth()" id="connectBtn">INITIALIZE SYSTEM</button>
+    </div>
+
+    <script>
+        let stickCharacteristic;
+        let lastSpokenTime = 0;
+
+        async function connectBluetooth() {
+            try {
+                navigator.vibrate(100); 
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ name: 'Smart_Stick_Pro' }],
+                    optionalServices: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b']
+                });
+
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
+                stickCharacteristic = await service.getCharacteristic('beb5483e-36e1-4688-b7f5-ea07361b26a8');
+
+                await stickCharacteristic.startNotifications();
+                stickCharacteristic.addEventListener('characteristicvaluechanged', handleData);
+
+                document.getElementById('msg').innerText = "SYSTEM ACTIVE";
+                document.getElementById('ping').style.display = 'inline-block';
+                document.getElementById('connectBtn').style.display = 'none';
+                speakAlert("Smart Stick Pro Online. Navigation enabled.");
+
+            } catch (error) {
+                console.log("Connect Error: " + error);
+            }
+        }
+
+        function handleData(event) {
+            let dataString = new TextDecoder().decode(event.target.value);
+            let parts = dataString.split(',');
+            if(parts.length < 3) return; 
+
+            let l = parseInt(parts[0]);
+            let c = parseInt(parts[1]);
+            let r = parseInt(parts[2]);
+
+            // Update Values
+            document.getElementById('L').innerText = l;
+            document.getElementById('C').innerText = c;
+            document.getElementById('R').innerText = r;
+
+            const card = document.getElementById('status-card');
+            
+            // Clear previous highlight classes
+            document.querySelectorAll('.box').forEach(b => b.classList.remove('active-sensor'));
+
+            // LOGIC TREE
+            if (c < 25) { // CRITICAL STOP
+                card.className = 'danger';
+                document.getElementById('boxC').classList.add('active-sensor');
+                navigator.vibrate([500, 100, 500]); 
+                speakAlert("STOP! Obstacle directly ahead.", true); // 'true' forces priority
+            } 
+            else if (c < 60) { // CENTER WARNING
+                card.className = 'warning';
+                document.getElementById('boxC').classList.add('active-sensor');
+                navigator.vibrate(200);
+                speakAlert(l > r ? "Object ahead. Path clear left." : "Object ahead. Path clear right.");
+            } 
+            else if (l < 50) { // LEFT SIDE
+                card.className = 'warning';
+                document.getElementById('boxL').classList.add('active-sensor');
+                navigator.vibrate([100, 50, 100]);
+                speakAlert("Obstacle on left.");
+            } 
+            else if (r < 50) { // RIGHT SIDE
+                card.className = 'warning';
+                document.getElementById('boxR').classList.add('active-sensor');
+                navigator.vibrate([100, 50, 100]);
+                speakAlert("Obstacle on right.");
+            } 
+            else {
+                card.className = '';
+                navigator.vibrate(0);
+            }
+        }
+
+        function speakAlert(message, priority = false) {
+            const now = Date.now();
+            // Use 3 seconds for normal messages, but allow priority messages every 1 second
+            let cooldown = priority ? 1000 : 3000;
+            
+            if (now - lastSpokenTime > cooldown) {
+                window.speechSynthesis.cancel(); // Stop current speaking to say the new warning
+                let speech = new SpeechSynthesisUtterance(message);
+                speech.rate = 1.1; // Slightly faster for urgent feel
+                speech.pitch = 1.0;
+                window.speechSynthesis.speak(speech);
+                lastSpokenTime = now;
+            }
+        }
+    </script>
+</body>
+</html>
