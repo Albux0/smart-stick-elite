@@ -184,7 +184,7 @@
                 card.className = 'danger';
                 document.getElementById('boxC').classList.add('active-sensor');
                 navigator.vibrate([500, 100, 500]); 
-                speakAlert("STOP! Obstacle directly ahead.", true); // 'true' forces priority
+                speakAlert("STOP!", true); // 'true' forces priority
             } 
             else if (c < 60) { // CENTER WARNING
                 card.className = 'warning';
@@ -227,3 +227,4 @@
     </script>
 </body>
 </html>
+
